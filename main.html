@@ -163,7 +163,18 @@
     */
 
     async function shareHouseKeys (pubKey, name) {
-      null; //need to write this TODO
+      // We would decrypt these of course.
+      // We save them in a variable so we can encrypt them later
+      var keys = (await mainUser.user().get('apps').get(name).promOnce()).data;
+      console.log("keys", keys);
+      // we need the epub for encryption, so we get the key from the user
+      // the rest is really how e2eechat messages works , replace it with your own.
+      var otherKeys = (await mainUser.user(pubKey).promOnce()).data;
+      console.log("otherKeys", otherKeys);
+      var secret = await SEA.secret(otherKeys.epub, {epub:keys.epub, epriv: keys.epriv});
+      var encrypted = await SEA.encrypt(keys, secret);
+      // set it to other user's 'inbox'
+      mainUser.user().get('messages').get(pubKey).put(encrypted);
     }
 
     /*
