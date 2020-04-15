@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="utf-8">
+    <title>Permissions test</title>
+  </head>
+  <script src="https://cdn.jsdelivr.net/npm/gun@0.2019.627/gun.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/gun@0.2019.627/sea.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/gun/lib/promise.js"></script>
+  <body>
+    Testing permissions
+    <br>
+    <input type="text" id="username" placeholder="username">
+    <input type="password" id="password" placeholder="password">
+    <br>
+    <button onclick="createUser()">Create</button>
+    <button onclick="authUser()">Authenticate</button>
+
+  </body>
+  <script type="text/javascript">
+
+    /* Initiate 2 instances of gun.
+    The main user instance will act as you, using a key chain to keep key pairs
+    that apps may generate.
+    All keys will be encrypted to yourself, which means only you will be able to access
+    them.
+    Other users may come and look at your profile via alias search or public key,
+    but they will only be able to read, what you have encrypted to them specifically.
+    */
+    var peers = [/*"https://e2eec.herokuapp.com/gun"*/]
+    const mainUser = Gun({peers:peers});
+
+    /* setup listeners for debugging */
+
+    mainUser._.on('in', function (msg) {
+      console.log('mainUser IN:', msg);
+    })
+
+    mainUser._.on('out', function (msg) {
+      console.log('mainUser OUT:', msg);
+      // send this msg to the other local instance
+      maintoApp(msg);
+    })
+
+    /* The appInterface instance is where the magic happens.
+    Each app functionality you use, or subscribe to, will allow you to generate
+    a new keypair associated with it's corresponding private data.
+    E.g. The site has a todo functionality. You can create private lists,
+    shared private lists and public lists (public as in unencrypted, discoverable)
+
+    Essentially the idea of the appInterface is that you log into the app whenever
+    you want to write or read from a private list. (Shared or not)
+    */
+    const appInterface = Gun({peers:peers, localStorage:false});
+
+    /* setup listeners for debugging */
+
+    appInterface._.on('in', function (msg) {
+      console.log('appInterface IN:', msg);
+    })
+
+    appInterface._.on('out', function (msg) {
+      console.log('appInterface OUT:', msg);
+      // send this msg to the other local instance
+      apptoMain(msg);
+    })
+
+    /* Function to create a User */
+
+    async function createUser () {
+      let username = document.getElementById('username');
+      username = username.value;
+      let password = document.getElementById('password');
+      password = password.value;
+      mainUser.user().create(username, password, console.log);
+    }
+
+    /* Function to log the mainUser in */
+
+    async function authUser () {
+      let username = document.getElementById('username');
+      username = username.value;
+      let password = document.getElementById('password');
+      password = password.value;
+      mainUser.user().auth(username, password, console.log);
+    }
+
+    /* To test the appInterface, we will create and save a keypair
+    pretending it is mean to go to a todo list.
+
+    For debugging reason we will not encrypt anything, but the base
+    assumption should be that all but public data on your profile should be encrypted.
+
+
+    schemaObject will be an empty Todo List object, that we will use to setup a basic structure
+    for UI to display.
+    name is just a name for the app feature it's gonna be ToDo.
+    */
+
+    async function buildHouse (schemaObject, name) {
+      // local var for these items.
+      // copy the object, which removes functions etc.
+      let object = Object.assign({}, schemaObject);
+
+      // generate a keypair to use with the feature
+      var keys = await SEA.pair();
+
+      // auth into the key
+      appInterface.user().auth(keys, function (user) {
+        console.log(user);
+        // setup datastructure on app feature
+        mainUser.user().get('apps').get(name).put(keys);
+        appInterface.user().put(object);
+        appInterface.user().leave();
+      });
+
+    }
+
+    /* One of the problems I am encountering is the disconnect between the 2 gun instances
+    below I will attempt to connect them by firing in and out events.
+    Might cause trouble with SEA, I guess we'll see (pun intended).
+
+    It worked!!
+    */
+
+    function maintoApp (msg) {
+      // fire the app interfaces in event with the msg from mainUser's out event
+      appInterface._.on('in', msg);
+    }
+
+    function apptoMain (msg) {
+      mainUser._.on('in', msg);
+    }
+
+    /* The following functions should work out of the box in this abstraction:
+    - Users can create and share houses with others
+    - Users can kick out others
+    - Users can give the keys to the house to someone (same as one, but deleting your own keys to the shared thing)
+    - Users can find public houses, read them, but not write to them
+    - Users can limit who can visit houses (shared encryption key in a group of people,
+      some with read only, others with read/write, as long as all use the same encryption key it doesn't matter)
+
+
+    We will need to either use a pre-existing end-to-end encrypted messaging system
+    or implement one, as many functions will need to be designed to work while
+    both parties or multiple parties are offline or online at different times.
+    Aka state preserving until complete.
+    -> this should be implemented at a later stage.
+    */
+
+    /*
+
+    -> Users can create and share houses with others
+
+    1. The person who builds the house must share the house with others
+    2. Using a built-in mechanism for key sharing (e2e message)
+    3. Person receiving the house key must accept it
+    4. App is added the other users key chain
+
+    @param publicKey - > publicKey of the other party
+    @param string - > name of the house we are sharing
+
+    */
+
+    async function shareHouseKeys (pubKey, name) {
+      null; //need to write this TODO
+    }
+
+    /*
+
+    -> Users can kick out others
+
+    1. the user initiating the kicking will perform a few actions
+    2. he creates a new house, which will be under the same name
+    3. he reads all the data presently found under the current house
+    4. he puts all the data into the new house
+    5. he performs a user delete on the old house
+    6. he communicates the keys to the remaining group
+    7. they have to basically just update their keychain and done
+
+    @param publickey -> public key of the person to be kicked
+    @param string -> name of the house
+
+    */
+
+    async function changeLocks (pubKey, name) {
+      null; //need to write this TODO
+    }
+
+    /*
+
+    -> Users can give the keys to the house to someone (same as one, but deleting your own keys to the shared thing)
+
+    1. The person who built the house is giving the house to one other person
+    2. Using a built-in mechanism for key sharing (e2e message)
+    3. Person receiving the house key must accept it
+    4. App is added the other users key chain
+    5. we then remove our own key chain entry
+
+    @param publicKey - > publicKey of the other party
+    @param string - > name of the house we are giving
+
+    */
+
+    async function giveKeysAway (pubKey, name) {
+      null; //need to write this TODO
+    }
+
+    /*
+
+    -> Users can find public houses, read them, but not write to them
+
+    1. The person who built the house can elect to go public
+    2. This requires an index, this can be an unprotected index to start.
+       But likely will need to be a super peer functionality that listens to
+    */
+
+  </script>
+</html>
