@@ -18,6 +18,43 @@
 
   </body>
   <script type="text/javascript">
+    const Gun2 = Gun;
+    // testing theory about messaging
+    Gun.on('opt', context);
+
+    function context (context) {
+      context.on('in', handleMessage);
+      this.to.next(context);
+    }
+
+    async function handleMessage (msg) {
+      let to = this.to;
+      console.log('catcher',msg);
+      // as a test, don't forward to to.next for now
+      if(msg.msg) {
+        console.log('received private message')
+        if(msg.msg.pub) {
+          // if this was sent by me give it along
+          if(mainUser.user().is.epub == msg.msg.pub) {
+            to.next(msg);
+          } else {
+            let pubKey = msg.msg.pub,
+                enc = msg.msg.enc;
+            let epub = pubKey;
+            let myPair = {epub:mainUser.user()._.sea.epub,epriv:mainUser.user()._.sea.epriv};
+            let secret = await SEA.secret(epub, myPair);
+            console.log(secret);
+            let dec = await SEA.decrypt(msg.msg.enc, secret);
+            console.log("msg: ", dec);
+            window.alert(`Received message from ${msg.msg.pub}: ${dec}`);
+          }  
+        } else {
+          console.log(msg.msg)
+        }
+      } else {
+        to.next(msg);
+      }
+    }
 
     /* Initiate 2 instances of gun.
     The main user instance will act as you, using a key chain to keep key pairs
@@ -27,7 +64,7 @@
     Other users may come and look at your profile via alias search or public key,
     but they will only be able to read, what you have encrypted to them specifically.
     */
-    var peers = [/*"https://e2eec.herokuapp.com/gun"*/]
+    var peers = ["http:localhost:8081/gun"/*"https://e2eec.herokuapp.com/gun"*/]
     const mainUser = Gun({peers:peers});
 
     /* setup listeners for debugging */
@@ -51,7 +88,7 @@
     Essentially the idea of the appInterface is that you log into the app whenever
     you want to write or read from a private list. (Shared or not)
     */
-    const appInterface = Gun({peers:peers, localStorage:false});
+    const appInterface = Gun2({peers:peers, localStorage:false});
 
     /* setup listeners for debugging */
 
@@ -167,6 +204,8 @@
       // We save them in a variable so we can encrypt them later
       var keys = (await mainUser.user().get('apps').get(name).promOnce()).data;
       console.log("keys", keys);
+      // let's tell them what app this is for as well
+      keys = keys + "//" + name;
       // we need the epub for encryption, so we get the key from the user
       // the rest is really how e2eechat messages works , replace it with your own.
       var otherKeys = (await mainUser.user(pubKey).promOnce()).data;
@@ -190,7 +229,7 @@
       // decrypt
       // read data
       // put key with name of app
-      
+
     }
 
     /*
@@ -241,6 +280,23 @@
     2. This requires an index, this can be an unprotected index to start.
        But likely will need to be a super peer functionality that listens to
     */
+
+    /* Sent a message to someone, secretly through the whole network. They will only receive it
+    if they are online
+    param string - > the message you want to send (or keys)
+    param publicKey - > the person you want to send this to
+    */
+
+    async function sendMessage(message, pubKey, epubKey) {
+      let epub = {epub:epubKey};
+      console.log(epub);
+      let myPair = mainUser.user()._.sea;
+      myPair = {epub:myPair.epub, epriv:myPair.epriv};
+      let secret = await SEA.secret(epub, myPair);
+      console.log(secret);
+      let enc = await SEA.encrypt(message, secret);
+      mainUser._.on('out', {msg:{pub:mainUser.user().is.epub, enc:enc}});
+    }
 
   </script>
 </html>

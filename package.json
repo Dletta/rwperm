@@ -9,6 +9,7 @@
   "author": "JCD",
   "license": "MIT",
   "dependencies": {
+    "express": "^4.17.1",
     "gun": "^0.2020.401"
   }
 }
