@@ -23,9 +23,7 @@ function logOut(msg){
 }
 
 var gun = Gun({
-  web: server,
-  localStorage: false,
-  radisk: false
+  web: server
 });
 
 gun._.on('in', logIn);

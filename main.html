@@ -4,8 +4,8 @@
     <meta charset="utf-8">
     <title>Permissions test</title>
   </head>
-  <script src="https://cdn.jsdelivr.net/npm/gun@0.2019.627/gun.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/gun@0.2019.627/sea.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/gun/sea.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/gun/lib/promise.js"></script>
   <body>
     Testing permissions
@@ -19,7 +19,11 @@
   </body>
   <script type="text/javascript">
     const Gun2 = Gun;
-    // testing theory about messaging
+
+    /* Sending messages that gun isn't saving but is transmitting through the
+    *  network anyways
+    */
+
     Gun.on('opt', context);
 
     function context (context) {
@@ -45,9 +49,10 @@
             let secret = await SEA.secret(epub, myPair);
             console.log(secret);
             let dec = await SEA.decrypt(msg.msg.enc, secret);
+            // TODO: Handle when decryption fails aka this wasn't addressed to me
             console.log("msg: ", dec);
             window.alert(`Received message from ${msg.msg.pub}: ${dec}`);
-          }  
+          }
         } else {
           console.log(msg.msg)
         }
@@ -56,13 +61,20 @@
       }
     }
 
-    /* Initiate 2 instances of gun.
-    The main user instance will act as you, using a key chain to keep key pairs
-    that apps may generate.
-    All keys will be encrypted to yourself, which means only you will be able to access
-    them.
-    Other users may come and look at your profile via alias search or public key,
-    but they will only be able to read, what you have encrypted to them specifically.
+    /*
+    To have abstract application keys into a keychain, so you can keep
+    your keys (aka one login, but many apps) without having to constantly
+    shift your logins between applications or shared documents
+
+    We do this by:
+
+    - Initiate 2 instances of gun.
+    - The main user instance will act as you, using a key chain to keep key pairs
+      that apps may generate.
+    - All keys will be encrypted to yourself, which means only you will be able to access
+      them.
+    - Other users may come and look at your profile via alias search or public key,
+      but they will only be able to read, what you have encrypted to them specifically.
     */
     var peers = ["http:localhost:8081/gun"/*"https://e2eec.herokuapp.com/gun"*/]
     const mainUser = Gun({peers:peers});
@@ -87,6 +99,11 @@
 
     Essentially the idea of the appInterface is that you log into the app whenever
     you want to write or read from a private list. (Shared or not)
+
+    This happens in the background for the user, so he won't know that we are switching
+    keys constantly for him, but that's the beauty of it, because most users
+    don't care how it happens as long as it does happen securely.
+
     */
     const appInterface = Gun2({peers:peers, localStorage:false});
 
@@ -98,7 +115,7 @@
 
     appInterface._.on('out', function (msg) {
       console.log('appInterface OUT:', msg);
-      // send this msg to the other local instance
+      // send this msg to the other main User instance
       apptoMain(msg);
     })
 
@@ -123,15 +140,14 @@
     }
 
     /* To test the appInterface, we will create and save a keypair
-    pretending it is mean to go to a todo list.
+    pretending it is meant to go to a todo list app.
 
     For debugging reason we will not encrypt anything, but the base
     assumption should be that all but public data on your profile should be encrypted.
 
-
     schemaObject will be an empty Todo List object, that we will use to setup a basic structure
     for UI to display.
-    name is just a name for the app feature it's gonna be ToDo.
+    name is just a name for the app feature, it's gonna be ToDo.
     */
 
     async function buildHouse (schemaObject, name) {
@@ -146,18 +162,21 @@
       appInterface.user().auth(keys, function (user) {
         console.log(user);
         // setup datastructure on app feature
+        // we would encrypt to ourselves and save it in our apps key chain
         mainUser.user().get('apps').get(name).put(keys);
+        // create a data schema in the app 'space'
         appInterface.user().put(object);
+        // log back out
         appInterface.user().leave();
       });
 
     }
 
-    /* One of the problems I am encountering is the disconnect between the 2 gun instances
-    below I will attempt to connect them by firing in and out events.
-    Might cause trouble with SEA, I guess we'll see (pun intended).
+    /*
 
-    It worked!!
+    sending data locally between 2 gun instances, that way
+    what you do in one, is transferred over to the other
+
     */
 
     function maintoApp (msg) {
@@ -169,12 +188,14 @@
       mainUser._.on('in', msg);
     }
 
-    /* The following functions should work out of the box in this abstraction:
-    - Users can create and share houses with others
-    - Users can kick out others
-    - Users can give the keys to the house to someone (same as one, but deleting your own keys to the shared thing)
-    - Users can find public houses, read them, but not write to them
-    - Users can limit who can visit houses (shared encryption key in a group of people,
+    /*
+
+    The following functions should work out of the box in this abstraction:
+    1 Users can create and share houses with others (app instances)
+    2 Users can kick out others (from shared app instances)
+    3 Users can give the keys to the house to someone (same as one, but deleting your own keys to the shared thing)
+    4 Users can find public houses, read them, but not write to them
+    5 Users can limit who can visit houses (shared encryption key in a group of people,
       some with read only, others with read/write, as long as all use the same encryption key it doesn't matter)
 
 
@@ -183,6 +204,7 @@
     both parties or multiple parties are offline or online at different times.
     Aka state preserving until complete.
     -> this should be implemented at a later stage.
+    -> A house as a mailbox (aka multiple inboxes per main user) would work
     */
 
     /*
@@ -296,6 +318,41 @@
       console.log(secret);
       let enc = await SEA.encrypt(message, secret);
       mainUser._.on('out', {msg:{pub:mainUser.user().is.epub, enc:enc}});
+    }
+
+    /* function to fill a fake feed with random stuff */
+
+    async function fillFeed (amount) {
+      for(var i =0;i<amount;i++){
+        var randomName = Gun.text.random(10);
+      	var randomContent = Gun.text.random(100);
+      	var randomTime = Gun.text.random(5);
+        var randomLink = Gun.text.random(7);
+
+      	var object = {
+          name:randomName,
+          content:randomContent,
+          time:randomTime};
+
+        await mainUser.get('feed').get(randomLink).promPut(object);
+      }
+    }
+
+    /* infinity fetch through the stuff */
+
+    async function* fetchFeed (numberOfItems, gunRef) {
+      var feed = gunRef;
+      var feedStack = Object.keys((await feed.promOnce()).data)
+      feedStack.shift(); //get rid of _ object metadata
+      while(feedStack.length>0) {
+        var array = [];
+        for(var i=0;i<numberOfItems;i++){
+          let soul = feedStack.shift();
+          let data = (await feed.get(soul).promOnce()).data;
+          array.push(data);
+        }
+        var numberOfItems = yield array;
+      }
     }
 
   </script>
