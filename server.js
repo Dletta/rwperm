@@ -41,7 +41,7 @@ setInterval(logPeers, 5000); //Log peer list every 5 secs
 setInterval(logData, 20000); //Log gun graph every 20 secs
 
 
-const view = path.join(__dirname, 'view/main.html');
+const view = path.join(__dirname, 'views/main.html');
 
 app.use(express.static('view'));
 app.get('*', function(_, res) {
